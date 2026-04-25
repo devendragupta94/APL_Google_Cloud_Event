@@ -1,0 +1,157 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-display: "Space Grotesk", sans-serif;
+  --color-accent: #00f2ff;
+  --color-surface: #0d1117;
+  --color-border: rgba(255,255,255,0.1);
+
+  --color-light-bg: #f8fafc;
+  --color-light-text: #0f172a;
+  --color-light-glass: rgba(255,255,255,0.8);
+  --color-light-border: rgba(0,0,0,0.05);
+}
+
+@layer base {
+  body {
+    @apply bg-[#05070a] text-white font-sans antialiased overflow-x-hidden transition-colors duration-500;
+  }
+
+  .light-mode body {
+    @apply bg-[#f8fafc] text-[#0f172a];
+  }
+}
+
+.light-mode .stadium-bg {
+  filter: brightness(0.9) grayscale(0.2) blur(1px);
+}
+
+.light-mode .glass-card {
+  @apply bg-white/70 border-gray-200/50 text-slate-900;
+}
+
+.light-mode .stadium-node {
+  @apply bg-white border-gray-100;
+}
+
+.light-mode header {
+  @apply bg-white/80 border-gray-200 text-slate-900;
+}
+
+.light-mode h1, .light-mode h2, .light-mode h3, .light-mode h4 {
+  @apply text-slate-900;
+}
+
+.light-mode p {
+  @apply text-slate-600;
+}
+
+.light-mode .text-white\/30 {
+  @apply text-slate-400;
+}
+
+.light-mode .text-white\/40 {
+  @apply text-slate-400;
+}
+
+.light-mode .bg-white\/5 {
+  @apply bg-slate-100;
+}
+
+.light-mode .border-white\/5 {
+  @apply border-slate-200;
+}
+
+.light-mode .border-white\/10 {
+  @apply border-slate-200;
+}
+
+.light-mode .mission-control-grid {
+  background-image: 
+    radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.02) 0%, transparent 100%),
+    linear-gradient(to right, rgba(0,0,0,0.01) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0,0,0,0.01) 1px, transparent 1px);
+}
+
+.stadium-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: url('https://images.unsplash.com/photo-1540749669545-3f3366efe577?q=80&w=2000&auto=format&fit=crop');
+  background-size: cover;
+  background-position: center;
+  filter: brightness(0.6) blur(2px);
+  transform: scale(1.02);
+}
+
+.mission-control-grid {
+  background-image: 
+    radial-gradient(circle at 50% 50%, rgba(0, 242, 255, 0.05) 0%, transparent 100%),
+    linear-gradient(to right, rgba(255,255,255,0.015) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.015) 1px, transparent 1px);
+  background-size: cover, 40px 40px;
+}
+
+.glass-card {
+  @apply bg-white/[0.03] border border-white/[0.08] backdrop-blur-xl rounded-2xl;
+}
+
+.accent-border {
+  @apply border-accent/40 shadow-[0_0_15px_rgba(0,242,255,0.1)];
+}
+
+.scanline {
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0,242,255,0.2), transparent);
+  position: absolute;
+  bottom: 100%;
+  animation: scanline 8s linear infinite;
+}
+
+@keyframes scanline {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(100vh); }
+}
+
+.stadium-node {
+  @apply bg-white/5 border border-white/5 rounded-md transition-all duration-300;
+}
+
+.stadium-node.active {
+  @apply bg-accent/20 border-accent shadow-[0_0_10px_rgba(0,242,255,0.3)];
+}
+
+.pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.9); }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  @apply bg-white/5 rounded-full;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-accent/20 rounded-full hover:bg-accent/40 transition-colors;
+}
+
+.ipl-gradient-text {
+  background: linear-gradient(135deg, #00f2ff 0%, #0066ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.ipl-accent-bg {
+  background: linear-gradient(135deg, rgba(0, 242, 255, 0.1) 0%, rgba(0, 102, 255, 0.1) 100%);
+}
