@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, User, Package, MapPin, Truck, ChevronRight, CheckCircle2, Search, X, Loader2, Info, Star, Bell, AlertTriangle, TrendingUp, UtensilsCrossed, Pizza, Sandwich, Coffee, Beer, Sun, Moon, Store, ArrowLeft } from 'lucide-react';
+import { ShoppingCart, User, Package, MapPin, Truck, ChevronRight, CheckCircle2, Search, X, Loader2, Info, Star, Bell, AlertTriangle, TrendingUp, UtensilsCrossed, Pizza, Sandwich, Coffee, Beer, Sun, Moon, Store, ArrowLeft, Sparkles, Send, ImageIcon, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MENU, Order, Vendor, BLOCKS, PICKUP_LOCATIONS, MenuItem, SHOPS } from './types';
-import { orchestrateDelivery, getFoodSuggestions } from './services/aiService';
+import { orchestrateDelivery, getFoodSuggestions, askCricketGuru } from './services/aiService';
 
 export default function App() {
   const [role, setRole] = useState<'spectator' | 'vendor' | 'admin'>('spectator');
@@ -21,6 +21,13 @@ export default function App() {
   const [feedbackOrder, setFeedbackOrder] = useState<Order | null>(null);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
+
+  // CricketGuru States
+  const [isGuruOpen, setIsGuruOpen] = useState(false);
+  const [guruInput, setGuruInput] = useState('');
+  const [guruImage, setGuruImage] = useState<string | null>(null);
+  const [guruChat, setGuruChat] = useState<{role: 'user' | 'guru', content: string, image?: string}[]>([]);
+  const [isGuruTyping, setIsGuruTyping] = useState(false);
 
   useEffect(() => {
     fetchState();
@@ -153,6 +160,35 @@ export default function App() {
     fetchState();
   };
 
+  const handleGuruImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setGuruImage(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const sendGuruMessage = async () => {
+    if (!guruInput.trim() && !guruImage) return;
+
+    const userMessage = { role: 'user' as const, content: guruInput, image: guruImage || undefined };
+    setGuruChat(prev => [...prev, userMessage]);
+    
+    // Clear input immediately for feel
+    const currentInput = guruInput;
+    const currentImage = guruImage;
+    setGuruInput('');
+    setGuruImage(null);
+    setIsGuruTyping(true);
+
+    const response = await askCricketGuru(currentInput, currentImage || undefined);
+    
+    setGuruChat(prev => [...prev, { role: 'guru', content: response }]);
+    setIsGuruTyping(false);
+  };
+
   return (
     <div className="min-h-screen relative overflow-hidden pb-10">
       <AnimatePresence>
@@ -225,21 +261,141 @@ export default function App() {
               className="space-y-10"
               id="spectator-view"
             >
-              {/* AI Suggestion Banner */}
-              <div className="w-full" id="ai-suggestion-section">
-                <div className="glass-card accent-border p-6 flex flex-col md:flex-row items-center gap-6 overflow-hidden relative" id="ai-banner-card">
-                  <div className="absolute top-0 right-0 p-2 opacity-10">
-                    <UtensilsCrossed className="w-24 h-24 rotate-12" />
-                  </div>
-                  <div className="w-16 h-16 bg-accent/20 rounded-2xl flex items-center justify-center shrink-0 border border-accent/20" id="ai-icon-container">
-                    <TrendingUp className="w-8 h-8 text-accent" />
-                  </div>
-                  <div className="relative z-10">
-                    <h3 className="font-display text-accent font-black text-sm tracking-widest uppercase mb-1">Kitchen Recommendation</h3>
-                    <p className="text-lg md:text-xl font-medium leading-relaxed italic opacity-90" id="ai-recommendation-text">"{aiSuggestion}"</p>
+              {/* AI Suggestion Banner & CricketGuru Hub */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6" id="ai-hub-section">
+                <div className="md:col-span-8">
+                  <div className="glass-card accent-border p-6 flex flex-col md:flex-row items-center gap-6 overflow-hidden relative h-full" id="ai-banner-card">
+                    <div className="absolute top-0 right-0 p-2 opacity-10">
+                      <UtensilsCrossed className="w-24 h-24 rotate-12" />
+                    </div>
+                    <div className="w-16 h-16 bg-accent/20 rounded-2xl flex items-center justify-center shrink-0 border border-accent/20" id="ai-icon-container">
+                      <TrendingUp className="w-8 h-8 text-accent" />
+                    </div>
+                    <div className="relative z-10">
+                      <h3 className="font-display text-accent font-black text-sm tracking-widest uppercase mb-1">Kitchen Recommendation</h3>
+                      <p className="text-lg md:text-xl font-medium leading-relaxed italic opacity-90" id="ai-recommendation-text">"{aiSuggestion}"</p>
+                    </div>
                   </div>
                 </div>
+
+                <div className="md:col-span-4">
+                  <button 
+                    onClick={() => setIsGuruOpen(true)}
+                    className="glass-card w-full p-6 group relative overflow-hidden h-full border-accent/30 hover:border-accent transition-all active:scale-95"
+                  >
+                     <div className="absolute inset-0 bg-accent/5 group-hover:bg-accent/10 transition-colors" />
+                     <div className="flex flex-col items-center justify-center text-center relative z-10 gap-3">
+                        <div className="w-12 h-12 bg-accent rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(0,242,255,0.5)]">
+                          <Sparkles className="w-6 h-6 text-black" />
+                        </div>
+                        <div>
+                          <h3 className="font-display font-black text-lg tracking-tighter uppercase italic">CricketGuru</h3>
+                          <p className="text-[10px] text-white/40 font-mono tracking-widest uppercase">Ask about the match</p>
+                        </div>
+                     </div>
+                  </button>
+                </div>
               </div>
+
+              {/* CricketGuru Fullscreen Overlay */}
+              <AnimatePresence>
+                {isGuruOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, backdropFilter: 'blur(0px)' }}
+                    animate={{ opacity: 1, backdropFilter: 'blur(20px)' }}
+                    exit={{ opacity: 0, backdropFilter: 'blur(0px)' }}
+                    className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-6"
+                  >
+                    <motion.div 
+                      initial={{ scale: 0.9, y: 20 }}
+                      animate={{ scale: 1, y: 0 }}
+                      exit={{ scale: 0.9, y: 20 }}
+                      className="w-full max-w-4xl max-h-[85vh] flex flex-col relative"
+                    >
+                      <button 
+                        onClick={() => setIsGuruOpen(false)}
+                        className="absolute -top-12 right-0 text-white/40 hover:text-white transition-colors"
+                      >
+                        <X className="w-8 h-8" />
+                      </button>
+
+                      {/* AI Header */}
+                      <div className="text-center mb-10">
+                        <div className="inline-flex items-center gap-3 bg-accent/10 px-6 py-2 rounded-full border border-accent/20 mb-4">
+                           <Sparkles className="w-4 h-4 text-accent" />
+                           <span className="text-xs font-black tracking-[0.3em] text-accent uppercase">Agentic Intelligence</span>
+                        </div>
+                        <h2 className="text-6xl font-display font-black uppercase italic tracking-tighter text-white">CricketGuru</h2>
+                        <p className="text-white/40 font-medium mt-2">Learn concepts, analyze visuals, and master the game.</p>
+                      </div>
+
+                      {/* Chat History */}
+                      <div className="flex-1 overflow-y-auto mb-6 space-y-6 pr-4 custom-scrollbar min-h-[300px]">
+                        {guruChat.length === 0 ? (
+                          <div className="h-full flex flex-col items-center justify-center opacity-20 text-center gap-4">
+                             <MessageSquare className="w-16 h-16" />
+                             <p className="text-sm font-mono max-w-xs uppercase tracking-widest">Awaiting match data or fan queries. How can I help today?</p>
+                          </div>
+                        ) : (
+                          guruChat.map((msg, i) => (
+                            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                              <div className={`max-w-[80%] rounded-3xl p-5 ${msg.role === 'user' ? 'bg-accent/10 border border-accent/20 text-white' : 'glass-card text-white/90 border-white/5'}`}>
+                                {msg.image && (
+                                  <img src={msg.image} alt="User upload" className="rounded-xl mb-4 max-w-xs border border-white/10" />
+                                )}
+                                <p className="leading-relaxed text-sm whitespace-pre-wrap">{msg.content}</p>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                        {isGuruTyping && (
+                          <div className="flex justify-start">
+                             <div className="glass-card p-5 border-white/5 flex gap-2">
+                                <span className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" />
+                                <span className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce [animation-delay:0.2s]" />
+                                <span className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce [animation-delay:0.4s]" />
+                             </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Central Input Box - AS REQUESTED */}
+                      <div className="relative group">
+                         <div className="absolute -inset-1 bg-gradient-to-r from-accent to-purple-500 rounded-[2.5rem] blur opacity-20 group-focus-within:opacity-40 transition-opacity" />
+                         <div className="glass-card p-4 rounded-[2rem] flex items-center gap-4 relative z-10 border-white/20">
+                            <label className="shrink-0 cursor-pointer p-4 hover:bg-white/5 rounded-2xl transition-colors">
+                               <ImageIcon className={`w-6 h-6 ${guruImage ? 'text-accent' : 'text-white/40'}`} />
+                               <input type="file" accept="image/*" className="hidden" onChange={handleGuruImageUpload} />
+                            </label>
+                            
+                            <input 
+                              type="text"
+                              value={guruInput}
+                              onChange={(e) => setGuruInput(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && sendGuruMessage()}
+                              placeholder="Ask anything about cricket..."
+                              className="flex-1 bg-transparent border-none outline-none text-lg font-medium text-white placeholder:text-white/20 px-2"
+                            />
+
+                            <button 
+                              onClick={sendGuruMessage}
+                              disabled={isGuruTyping}
+                              className="bg-accent text-black p-4 rounded-2xl hover:scale-105 active:scale-95 transition-all shadow-[0_0_20px_rgba(0,242,255,0.4)] disabled:opacity-50"
+                            >
+                               {isGuruTyping ? <Loader2 className="w-6 h-6 animate-spin" /> : <Send className="w-6 h-6" />}
+                            </button>
+                         </div>
+                         {guruImage && (
+                           <div className="absolute -top-20 left-4 bg-black/60 backdrop-blur-md p-2 rounded-xl border border-white/10 flex items-center gap-2">
+                              <img src={guruImage} className="h-12 w-12 object-cover rounded-lg" alt="Preview" />
+                              <button onClick={() => setGuruImage(null)} className="text-white/40 hover:text-red-500"><X className="w-4 h-4" /></button>
+                           </div>
+                         )}
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Stadium Selector & Info */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-10" id="location-selection-grid">
