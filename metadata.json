@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Zaika Stadium Agent",
+  "description": "Authentic Indian in-stadium ordering and fulfillment system (IPL Edition) using AI to coordinate roaming vendors with landmark-based delivery.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": []
+}
