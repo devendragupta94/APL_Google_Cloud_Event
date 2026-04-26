@@ -11,9 +11,16 @@ async function startServer() {
   // In-memory state for the demo
   let orders: any[] = [];
   let vendors: any[] = [
-    { id: "v1", name: "Amit", location: "Block A", status: "idle" },
-    { id: "v2", name: "Rahul", location: "Block C", status: "idle" },
-    { id: "v3", name: "Suresh", location: "Block F", status: "idle" },
+    { id: "v1", name: "Amit (East)", location: "Gate 1", status: "idle" },
+    { id: "v2", name: "Rahul (West)", location: "Gate 5", status: "idle" },
+    { id: "v3", name: "Suresh (North)", location: "Gate 8", status: "idle" },
+    { id: "v4", name: "Priya (South)", location: "Gate 3", status: "idle" },
+    { id: "v5", name: "Vikram (East)", location: "Gate 2", status: "idle" },
+    { id: "v6", name: "Deepak (West)", location: "Gate 7", status: "idle" },
+    { id: "v7", name: "Anil (North)", location: "Gate 9", status: "idle" },
+    { id: "v8", name: "Sunita (South)", location: "Gate 4", status: "idle" },
+    { id: "v9", name: "Rajesh (Central)", location: "Gate 10", status: "idle" },
+    { id: "v10", name: "Kunal (East)", location: "Gate 2", status: "idle" },
   ];
 
   // API routes
@@ -86,6 +93,33 @@ async function startServer() {
       res.json(orders[orderIndex]);
     } else {
       res.status(404).json({ error: "Order not found" });
+    }
+  });
+
+  app.post("/api/orders/:id/assign-vendor", (req, res) => {
+    const { id } = req.params;
+    const { vendorId } = req.body;
+    const orderIndex = orders.findIndex(o => o.id === id);
+    const vendorIndex = vendors.findIndex(v => v.id === vendorId);
+    
+    if (orderIndex > -1 && vendorIndex > -1) {
+      orders[orderIndex].vendorId = vendorId;
+      vendors[vendorIndex].status = "assigned";
+      res.json({ order: orders[orderIndex], vendor: vendors[vendorIndex] });
+    } else {
+      res.status(404).json({ error: "Order or Vendor not found" });
+    }
+  });
+
+  app.post("/api/vendors/:id/update-status", (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    const vendorIndex = vendors.findIndex(v => v.id === id);
+    if (vendorIndex > -1) {
+      vendors[vendorIndex].status = status;
+      res.json(vendors[vendorIndex]);
+    } else {
+      res.status(404).json({ error: "Vendor not found" });
     }
   });
 

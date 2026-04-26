@@ -6,8 +6,8 @@ export interface Order {
   landmark: string;
   customerName: string;
   customerPhone: string;
-  status: 'pending' | 'preparing' | 'assigned' | 'delivering' | 'completed';
-  vendorId?: string;
+  status: 'pending' | 'preparing' | 'ready_for_pickup' | 'assigned' | 'delivering' | 'completed';
+  vendorId?: string; // This is the ID of the DeliveryPartner
   createdAt: string;
   estimatedPrepTime: number; // in minutes
   adminMessage?: string;
@@ -76,11 +76,11 @@ export const MENU: MenuItem[] = [
   { id: 'fs2', name: 'Paneer Mayonnaise Wrap', price: 240, category: 'SNACKS', icon: 'Wrap', avgPrepTime: 8, brandId: 'faasos' },
 ];
 
-export interface Vendor {
+export interface DeliveryPartner {
   id: string;
   name: string;
   location: string;
-  status: 'idle' | 'preparing' | 'delivering';
+  status: 'idle' | 'assigned' | 'delivering';
 }
 
 export const BLOCKS = ['Block A', 'Block B', 'Block C', 'Block D', 'Block E', 'Block F', 'Block G', 'Block H'];

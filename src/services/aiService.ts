@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { Order, Vendor } from "../types";
+import { Order, DeliveryPartner } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -35,7 +35,7 @@ export async function askCricketGuru(prompt: string, imageBase64?: string) {
   }
 }
 
-export async function orchestrateDelivery(order: Order, vendors: Vendor[]) {
+export async function orchestrateDelivery(order: Order, vendors: DeliveryPartner[]) {
   if (!process.env.GEMINI_API_KEY) {
     return { vendorId: vendors.find(v => v.status === 'idle')?.id || vendors[0].id, reasoning: "Manual assignment (Offline)." };
   }
@@ -45,11 +45,11 @@ export async function orchestrateDelivery(order: Order, vendors: Vendor[]) {
       model: "gemini-3-flash-preview",
       contents: [{ role: 'user', parts: [{ text: `
         System: You are an AI Logistics Orchestrator for a busy stadium (Zaika Stadium Agent).
-        Task: Assign the best roaming vendor to a new food order.
+        Task: Assign the best roaming delivery partner to a new food order.
         
         Order: Block ${order.block}, Seat ${order.seat}, Customer: ${order.customerName || 'Fan'} (Phone: ${order.customerPhone || 'N/A'}), Cues: ${order.landmark || 'None provided'}
         
-        Available Vendors:
+        Available Delivery Partners:
         ${vendors.map(v => `- ID ${v.id}: ${v.name} at ${v.location} (${v.status})`).join('\n')}
         
         Return ONLY a JSON object with: { "vendorId": string, "reasoning": string }

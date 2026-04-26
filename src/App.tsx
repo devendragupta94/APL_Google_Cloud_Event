@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { ShoppingCart, User, Package, MapPin, Truck, ChevronRight, CheckCircle2, Search, X, Loader2, Info, Star, Bell, AlertTriangle, TrendingUp, UtensilsCrossed, Pizza, Sandwich, Coffee, Beer, Sun, Moon, Store, ArrowLeft, Sparkles, Send, ImageIcon, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MENU, Order, Vendor, BLOCKS, PICKUP_LOCATIONS, MenuItem, SHOPS } from './types';
+import { MENU, Order, DeliveryPartner, BLOCKS, PICKUP_LOCATIONS, MenuItem, SHOPS } from './types';
 import { orchestrateDelivery, getFoodSuggestions, askCricketGuru } from './services/aiService';
 
 export default function App() {
-  const [role, setRole] = useState<'spectator' | 'vendor' | 'admin'>('spectator');
+  const [role, setRole] = useState<'spectator' | 'vendor' | 'admin' | 'delivery'>('spectator');
+  const [isStaffLoggedIn, setIsStaffLoggedIn] = useState(false);
+  const [showStaffLogin, setShowStaffLogin] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [loginError, setLoginError] = useState(false);
   const [cart, setCart] = useState<{item: MenuItem, quantity: number}[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [vendors, setVendors] = useState<DeliveryPartner[]>([]);
   const [seat, setSeat] = useState('42');
   const [block, setBlock] = useState('Block A');
   const [landmark, setLandmark] = useState('');
@@ -32,6 +36,20 @@ export default function App() {
   useEffect(() => {
     fetchState();
     const interval = setInterval(fetchState, 3000);
+
+    // Role detection from URL
+    const params = new URLSearchParams(window.location.search);
+    const urlRole = params.get('role');
+    if (urlRole) {
+      if (['vendor', 'kitchen', 'admin', 'delivery'].includes(urlRole)) {
+        const normalizedRole = urlRole === 'kitchen' ? 'vendor' : urlRole as any;
+        setRole(normalizedRole);
+        setIsStaffLoggedIn(true); // Trust URL for staff device setup
+      } else {
+        setRole('spectator');
+      }
+    }
+
     return () => clearInterval(interval);
   }, []);
 
@@ -80,33 +98,58 @@ export default function App() {
     if (cart.length === 0) return;
     setIsOrdering(true);
     
-    const newOrder = {
-      items: cart.map(c => c.item),
-      seat,
-      block,
-      landmark,
-      customerName,
-      customerPhone,
-    };
+    // Group cart items by brandId
+    const groups: { [key: string]: MenuItem[] } = {};
+    cart.forEach(c => {
+      const brandId = c.item.brandId || 'general';
+      if (!groups[brandId]) groups[brandId] = [];
+      for (let i = 0; i < c.quantity; i++) {
+        groups[brandId].push(c.item);
+      }
+    });
 
     try {
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newOrder),
-      });
-      const order = await res.json();
-      
-      const assignment = await orchestrateDelivery(order, vendors);
-      
-      await fetch(`/api/orders/${order.id}/update-status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'preparing' }),
-      });
+      const brandIds = Object.keys(groups);
+      let currentVendors = [...vendors];
 
-      // Assign vendor specifically in local state simulation
-      // In a real app the backend would handle assignment logic
+      for (const brandId of brandIds) {
+        const items = groups[brandId];
+        const newOrderReq = {
+          items,
+          seat,
+          block,
+          landmark,
+          customerName,
+          customerPhone,
+        };
+
+        const res = await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newOrderReq),
+        });
+        const order = await res.json();
+        
+        // Pass current active vendors (idle ones preferred)
+        const idleVendors = currentVendors.filter(v => v.status === 'idle');
+        const assignment = await orchestrateDelivery(order, idleVendors.length > 0 ? idleVendors : currentVendors);
+        
+        if (assignment && assignment.vendorId) {
+          await fetch(`/api/orders/${order.id}/assign-vendor`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vendorId: assignment.vendorId }),
+          });
+          // Update local list to prevent immediate double assignment in loop
+          currentVendors = currentVendors.map(v => v.id === assignment.vendorId ? { ...v, status: 'assigned' as const } : v);
+        }
+
+        await fetch(`/api/orders/${order.id}/update-status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'preparing' }),
+        });
+      }
       
       setCart([]);
       setIsOrdering(false);
@@ -135,6 +178,19 @@ export default function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status })
     });
+
+    // If completed, release the delivery partner
+    if (status === 'completed') {
+      const order = orders.find(o => o.id === orderId);
+      if (order && order.vendorId) {
+        await fetch(`/api/vendors/${order.vendorId}/update-status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'idle' })
+        });
+      }
+    }
+
     fetchState();
   };
 
@@ -189,11 +245,81 @@ export default function App() {
     setIsGuruTyping(false);
   };
 
+  const handleStaffLogin = () => {
+    // Hidden Master PIN for Demo: 1234
+    if (pinInput === '1234') {
+      setIsStaffLoggedIn(true);
+      setShowStaffLogin(false);
+      setPinInput('');
+      setLoginError(false);
+    } else {
+      setLoginError(true);
+      setPinInput('');
+    }
+  };
+
+  const handleRoleSwitch = (r: 'spectator' | 'vendor' | 'delivery' | 'admin') => {
+    if (r === 'spectator') {
+      setRole(r);
+    } else {
+      if (isStaffLoggedIn) {
+        setRole(r);
+      } else {
+        setRole(r); // Temporary for the next step of login
+        setShowStaffLogin(true);
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen relative overflow-hidden pb-10">
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
+        {showStaffLogin && (
+          <motion.div 
+            key="staff-login"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-xl flex items-center justify-center p-6"
+          >
+            <div className="glass-card p-10 max-w-sm w-full text-center border-accent/20">
+               <div className="w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <User className="w-8 h-8 text-accent" />
+               </div>
+               <h2 className="text-2xl font-display font-black uppercase italic italic mb-2">Staff Verification</h2>
+               <p className="text-white/40 text-[10px] uppercase font-black tracking-widest mb-8">Enter Agentic Access PIN</p>
+               
+               <div className="space-y-4">
+                  <input 
+                    type="password"
+                    value={pinInput}
+                    onChange={(e) => setPinInput(e.target.value)}
+                    placeholder="••••"
+                    className={`w-full bg-white/5 border-2 ${loginError ? 'border-red-500/50' : 'border-white/10'} rounded-2xl p-4 text-center text-3xl font-mono tracking-[1em] focus:border-accent outline-none transition-all`}
+                    autoFocus
+                    onKeyDown={(e) => e.key === 'Enter' && handleStaffLogin()}
+                  />
+                  {loginError && <p className="text-red-500 text-[10px] font-black uppercase">Invalid Access PIN</p>}
+                  <button 
+                    onClick={handleStaffLogin}
+                    className="w-full bg-accent text-black font-black py-4 rounded-2xl hover:scale-[1.02] active:scale-95 transition-all shadow-[0_0_20px_rgba(0,242,255,0.3)]"
+                  >
+                    AUTHORIZE ACCESS
+                  </button>
+                  <button 
+                    onClick={() => { setShowStaffLogin(false); setRole('spectator'); setPinInput(''); setLoginError(false); }}
+                    className="w-full text-white/40 hover:text-white transition-colors text-[10px] font-black uppercase"
+                  >
+                    CANCEL & EXIT
+                  </button>
+               </div>
+            </div>
+          </motion.div>
+        )}
+
         {role === 'spectator' && (
           <motion.div 
+            key="spectator-bg"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -236,16 +362,32 @@ export default function App() {
               {theme === 'dark' ? <Sun className="w-5 h-5 group-hover:rotate-45 transition-transform" /> : <Moon className="w-5 h-5 group-hover:-rotate-12 transition-transform text-slate-700" />}
             </button>
 
-            <div className="flex bg-white/5 p-1.5 rounded-xl border border-white/10 gap-1">
-            {(['spectator', 'vendor', 'admin'] as const).map(r => (
-              <button
-                key={r}
-                onClick={() => setRole(r)}
-                className={`px-6 py-2.5 rounded-lg text-xs uppercase tracking-[0.2em] font-bold transition-all ${role === r ? 'bg-accent text-black shadow-[0_0_20px_rgba(0,242,255,0.3)]' : 'text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                {r.replace('spectator', 'FANS').replace('vendor', 'KITCHEN')}
-              </button>
-            ))}
+            <div className="flex bg-white/5 p-1.5 rounded-xl border border-white/10 gap-1 overflow-hidden">
+            {(['spectator', 'vendor', 'delivery', 'admin'] as const).map(r => {
+              // Hide protected roles from the standard fans view switcher unless logged in
+              if (r !== 'spectator' && !isStaffLoggedIn) return null;
+              
+              return (
+                <button
+                  key={r}
+                  onClick={() => handleRoleSwitch(r)}
+                  className={`px-4 py-2.5 rounded-lg text-xs uppercase tracking-[0.2em] font-bold transition-all ${role === r ? 'bg-accent text-black shadow-[0_0_20px_rgba(0,242,255,0.3)]' : 'text-white/40 hover:bg-white/5 hover:text-white'}`}
+                >
+                  {r.replace('spectator', 'FANS').replace('vendor', 'KITCHEN').replace('delivery', 'DELIVERY')}
+                </button>
+              );
+            })}
+            
+            {/* Hidden entry point for staff who are NOT logged in yet */}
+            {!isStaffLoggedIn && (
+               <button 
+                 onClick={() => { setRole('vendor'); setShowStaffLogin(true); }}
+                 className="w-10 h-10 flex items-center justify-center text-white/10 hover:text-white/40 transition-colors"
+                 title="Staff Entrance"
+               >
+                  <Store className="w-4 h-4" />
+               </button>
+            )}
           </div>
         </div>
       </div>
@@ -912,10 +1054,12 @@ export default function App() {
                          <button id={`start-prep-${order.id}`} onClick={() => updateStatus(order.id, 'preparing')} className="w-full bg-red-600 text-white font-black py-5 rounded-2xl hover:bg-red-500 active:scale-95 transition-all uppercase text-[10px] tracking-[0.2em] shadow-lg shadow-red-900/20">START PREPARATION</button>
                        )}
                        {order.status === 'preparing' && (
-                         <button id={`mark-ready-${order.id}`} onClick={() => updateStatus(order.id, 'delivering')} className="w-full bg-accent text-black font-black py-5 rounded-2xl hover:scale-[1.02] active:scale-95 transition-all uppercase text-[10px] tracking-[0.2em] shadow-[0_0_30px_rgba(0,242,255,0.2)]">MARK AS READY</button>
+                         <button id={`mark-ready-${order.id}`} onClick={() => updateStatus(order.id, 'ready_for_pickup')} className="w-full bg-accent text-black font-black py-5 rounded-2xl hover:scale-[1.02] active:scale-95 transition-all uppercase text-[10px] tracking-[0.2em] shadow-[0_0_30px_rgba(0,242,255,0.2)]">MARK AS READY FOR PICKUP</button>
                        )}
-                       {order.status === 'delivering' && (
-                         <button id={`confirm-dispatch-${order.id}`} onClick={() => updateStatus(order.id, 'completed')} className="w-full bg-green-600 text-white font-black py-5 rounded-2xl hover:bg-green-500 active:scale-95 transition-all uppercase text-[10px] tracking-[0.2em] shadow-lg shadow-green-900/20">CONFIRM DISPATCH</button>
+                       {(order.status === 'ready_for_pickup' || order.status === 'assigned') && (
+                         <div className="bg-white/5 p-4 rounded-xl text-center border border-dashed border-white/10">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-white/30">Awaiting Delivery Partner Pickup</p>
+                         </div>
                        )}
                     </div>
                   </motion.div>
@@ -924,6 +1068,101 @@ export default function App() {
                   <div className="col-span-full py-40 flex flex-col items-center justify-center opacity-20 space-y-4 border-2 border-dashed border-white/10 rounded-3xl font-mono text-xs uppercase tracking-widest" id="vendor-empty-state">
                     <Package className="w-16 h-16" />
                     <span>No active kitchen tasks</span>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {role === 'delivery' && (
+            <motion.div 
+              key="delivery"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="space-y-8"
+              id="delivery-dashboard"
+            >
+              <div className="flex justify-between items-center bg-accent text-black p-8 rounded-3xl shadow-[0_20px_50px_rgba(0,242,255,0.2)] relative overflow-hidden" id="delivery-header-banner">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-white/20 blur-3xl rounded-full -mr-32 -mt-32 pointer-events-none" />
+                <div className="flex items-center gap-6 relative z-10">
+                  <div className="w-16 h-16 bg-black rounded-2xl flex items-center justify-center border-4 border-black/10 shadow-xl">
+                    <Truck className="w-9 h-9 text-accent" />
+                  </div>
+                  <div>
+                    <h2 className="text-4xl font-display font-black uppercase italic tracking-tighter leading-none">Deliverer Hub</h2>
+                    <p className="text-[10px] font-black opacity-60 tracking-[0.2em] mt-1">LAST-MILE AGENTIC LOGISTICS</p>
+                  </div>
+                </div>
+                <div className="text-right flex items-center gap-10 relative z-10">
+                   <div className="flex flex-col items-end">
+                     <p className="text-[10px] font-black opacity-60">MY ORDERS</p>
+                     <p className="text-4xl font-mono font-black">{orders.filter(o => o.status === 'delivering').length}</p>
+                   </div>
+                   <div className="h-12 w-px bg-black/10" />
+                   <div className="flex flex-col items-end">
+                     <p className="text-[10px] font-black opacity-60">READY FOR PICKUP</p>
+                     <p className="text-4xl font-mono font-black">{orders.filter(o => o.status === 'ready_for_pickup').length}</p>
+                   </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {orders.filter(o => ['ready_for_pickup', 'delivering'].includes(o.status)).map(order => (
+                  <motion.div 
+                    layout
+                    key={order.id} 
+                    className={`glass-card p-8 flex flex-col justify-between border-4 relative overflow-hidden group transition-all hover:bg-white/[0.05] ${order.status === 'ready_for_pickup' ? 'border-accent shadow-[0_0_30px_rgba(0,242,255,0.1)]' : 'border-white/10'}`}
+                  >
+                    <div>
+                      <div className="flex justify-between items-start mb-8">
+                        <span className="bg-white/5 border border-white/10 px-4 py-2 rounded-xl font-mono text-xl font-black text-accent">#{order.id}</span>
+                        <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${order.status === 'ready_for_pickup' ? 'bg-accent text-black' : 'bg-white/10 text-white/40'}`}>
+                          {order.status.replace(/_/g, ' ')}
+                        </div>
+                      </div>
+
+                      <div className="bg-white/5 p-4 rounded-2xl border border-white/10 mb-8">
+                         <div className="mb-4 pb-4 border-b border-white/5">
+                            <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Fan Delivery Point</p>
+                            <p className="text-lg font-black text-accent uppercase leading-none">{order.block} • SEAT {order.seat}</p>
+                            <p className="text-xs font-medium text-white/60 mt-2 italic">"{order.landmark || 'No landmark'}"</p>
+                         </div>
+                         <div className="flex justify-between gap-4">
+                            <div>
+                               <p className="text-[8px] font-black text-white/40 uppercase tracking-widest">Customer</p>
+                               <p className="text-xs font-black text-white uppercase">{order.customerName}</p>
+                            </div>
+                            <div className="text-right">
+                               <p className="text-[8px] font-black text-white/40 uppercase tracking-widest">Phone</p>
+                               <p className="text-xs font-mono text-accent">{order.customerPhone}</p>
+                            </div>
+                         </div>
+                      </div>
+                      
+                      <div className="space-y-4 mb-8">
+                        <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Package Contents</p>
+                        <div className="flex flex-wrap gap-2">
+                           {order.items.map((it, idx) => (
+                             <span key={idx} className="bg-white/5 border border-white/10 px-3 py-1 rounded text-[10px] font-black uppercase text-white/50">{it.name}</span>
+                           ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3">
+                       {order.status === 'ready_for_pickup' && (
+                         <button onClick={() => updateStatus(order.id, 'delivering')} className="w-full bg-accent text-black font-black py-5 rounded-2xl hover:scale-[1.02] active:scale-95 transition-all uppercase text-[10px] tracking-[0.2em] shadow-[0_0_30px_rgba(0,242,255,0.2)]">START DELIVERY RUN</button>
+                       )}
+                       {order.status === 'delivering' && (
+                         <button onClick={() => updateStatus(order.id, 'completed')} className="w-full bg-green-600 text-white font-black py-5 rounded-2xl hover:bg-green-500 active:scale-95 transition-all uppercase text-[10px] tracking-[0.2em] shadow-lg shadow-green-900/20">CONFIRM HANDOVER</button>
+                       )}
+                    </div>
+                  </motion.div>
+                ))}
+                {orders.filter(o => ['ready_for_pickup', 'delivering'].includes(o.status)).length === 0 && (
+                  <div className="col-span-full py-40 flex flex-col items-center justify-center opacity-20 space-y-4 border-2 border-dashed border-white/10 rounded-3xl font-mono text-xs uppercase tracking-widest">
+                    <Truck className="w-16 h-16" />
+                    <span>No orders awaiting delivery</span>
                   </div>
                 )}
               </div>
@@ -975,7 +1214,7 @@ export default function App() {
                        </div>
                        <div className="flex items-center gap-2">
                          <div className="w-2 h-2 bg-accent rounded-full" />
-                         <span className="text-[9px] font-black opacity-40 uppercase">Vendors</span>
+                         <span className="text-[9px] font-black opacity-40 uppercase">Partners</span>
                        </div>
                     </div>
                   </div>
