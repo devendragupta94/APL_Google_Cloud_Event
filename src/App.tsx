@@ -601,7 +601,7 @@ export default function App() {
                        <button 
                          id="back-to-hub-btn"
                          onClick={() => setSelectedShopId(null)}
-                         className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-accent transition-colors mb-8 group"
+                         className="relative z-20 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-accent transition-colors mb-8 group"
                        >
                          <ArrowLeft className="w-3 h-3 group-hover:-translate-x-1 transition-transform" /> Back to Stadium Hub
                        </button>
